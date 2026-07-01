@@ -1,10 +1,20 @@
 """
 Autenticación simple para un único usuario (el dueño del almacén).
-La contraseña (hasheada con bcrypt) se guarda en los secrets de Streamlit,
-nunca en el código ni en el repositorio.
+La contraseña (hasheada con PBKDF2-SHA256, librería estándar de Python)
+se guarda en los secrets de Streamlit, nunca en el código ni en el repositorio.
 """
 import streamlit as st
-import bcrypt
+import hashlib
+import hmac
+
+
+def verificar_password(password: str, salt_hex: str, hash_hex: str) -> bool:
+    """Recalcula el hash con el salt guardado y compara de forma segura."""
+    salt = bytes.fromhex(salt_hex)
+    calculado = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt, 200_000
+    )
+    return hmac.compare_digest(calculado.hex(), hash_hex)
 
 
 def check_login():
@@ -25,9 +35,10 @@ def check_login():
 
         if submitted:
             usuario_ok = usuario == st.secrets["APP_USERNAME"]
-            password_ok = bcrypt.checkpw(
-                password.encode("utf-8"),
-                st.secrets["APP_PASSWORD_HASH"].encode("utf-8")
+            password_ok = usuario_ok and verificar_password(
+                password,
+                st.secrets["APP_PASSWORD_SALT"],
+                st.secrets["APP_PASSWORD_HASH"]
             )
             if usuario_ok and password_ok:
                 st.session_state["autenticado"] = True
@@ -43,3 +54,4 @@ def logout_button():
     if st.sidebar.button("🚪 Cerrar sesión", use_container_width=True):
         st.session_state["autenticado"] = False
         st.rerun()
+        
